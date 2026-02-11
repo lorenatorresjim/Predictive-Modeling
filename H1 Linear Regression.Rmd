@@ -1,0 +1,752 @@
+---
+title: "Homework 1: Linear Regression & GLM"
+subtitle: "MSc Big Data Analytics — UC3M"
+author: "Lorena Torres Jiménez (100475834)"
+date: 14/12/2025
+
+output:
+  html_document:
+    theme: cerulean       
+    css: style_health.css
+    toc: true
+    toc_depth: 3      
+    toc_float: false
+    number_sections: true
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: true
+    toc: true
+    includes:
+      in_header:
+        - \usepackage{fontspec}
+        - \setmainfont{Times New Roman}
+        - \usepackage[margin=2.5cm]{geometry}
+---
+
+# Introduction
+
+In the current landscape of digital wellness and personal fitness, new technological requirements have arisen, including the accurate prediction of an individual’s caloric expenditure per exercise session, and the prediction of an individual to have a high metabolic risk. These predictions are essential for designing personalized training programs, monitoring physical progress and achieving health and nutritional goals.
+
+# Linear Regression
+
+## **The dataset**
+
+The dataset used in this Linear Regression section is composed of 20000 observations, focusing on predicting caloric expenditure. The dataset, health_data.csv, was obtained from Kaggle, and it includes 54 variables such as weight and height, session duration, workout type and frequency, fat percentage, and the target variable, "Calories_Burned":
+
+-   **Age:** Age of the participant (in years)
+
+-   **Gender:** Biological gender (Male/Female)
+
+-   **Weight (kg):** Weight of the individual in kilograms
+
+-   **Height (m):** Height of the individual in meters
+
+-   **Max_BPM:** Maximum heart rate recorded during a workout session
+
+-   **Avg_BPM:** Average heart rate maintained during the session
+
+-   **Resting_BPM:** Resting heart rate before starting the workout
+
+-   **Session_Duration (hours):** Duration of the workout session in hours
+
+-   **Calories_Burned:** Total calories burned during the session
+
+-   **Workout_Type:** Type of workout performed (e.g., Strength, HIIT, Cardio)
+
+-   **Fat_Percentage:** Body fat percentage of the individual
+
+-   **Water_Intake (liters):** Average daily water consumption in liters
+
+-   **Workout_Frequency (days/week):** Number of workout days per week
+
+-   **Experience_Level:** Fitness experience level (1=Beginner, 2=Intermediate, 3=Advanced)
+
+-   **BMI:** Body Mass Index, a measure of body fat based on height and weight
+
+-   **Daily meals frequency:** Number of meals consumed daily
+
+-   **Physical Exercise:** Indicates the type or frequency of physical activity
+
+-   **Carbs:** Daily carbohydrate intake (grams)
+
+-   **Proteins:** Daily protein intake (grams)
+
+-   **Fats:** Daily fat intake (grams)
+
+-   **Calories:** Total daily calorie intake from food
+
+-   **meal_name:** Name of the meal (e.g., Breakfast, Lunch, Dinner)
+
+-   **meal_type:** Type of meal (e.g., Snack, Main, Beverage)
+
+-   **diet_type:** Type of diet followed (e.g., Keto, Vegan, Balanced)
+
+-   **sugar_g:** Sugar content in grams per meal
+
+-   **sodium_mg:** Sodium content in milligrams per meal
+
+-   **cholesterol_mg:** Cholesterol content in milligrams per meal
+
+-   **serving_size_g:** Portion size of the meal in grams
+
+-   **cooking_method:** Cooking method used (e.g., Boiled, Fried, Grilled)
+
+-   **prep_time_min:** Preparation time in minutes
+
+-   **cook_time_min:** Cooking time in minutes
+
+-   **rating:** Meal or workout rating (typically 1–5 scale)
+
+-   **is_healthy:** Boolean indicator (True/False) of whether the meal/workout is healthy
+
+-   **Name of Exercise:** Name of the exercise performed
+
+-   **Sets:** Number of sets completed in the exercise
+
+-   **Reps:** Number of repetitions per set
+
+-   **Benefit:** Description of the exercise’s physical benefit
+
+-   **Burns Calories (per 30 min):** Estimated calories burned in 30 minutes of that exercise
+
+-   **Target Muscle Group:** Main muscle group targeted by the exercise
+
+-   **Equipment Needed:** Equipment required to perform the exercise
+
+-   **Difficulty Level:** Exercise difficulty level (Beginner, Intermediate, Advanced)
+
+-   **Body Part:** Primary body part involved (e.g., Arms, Legs, Chest)
+
+-   **Type of Muscle:** Type of muscle engaged (e.g., Upper, Core, Grip Strength)
+
+-   **Workout:** Specific workout or exercise name
+
+## **The goal**
+
+The goal of the first main section of this case study was to predict the amount of calories burned based on different parameters related to the proper workout session and to physiological parameters. This was achieved by constructing a linear regression model in which the key steps followed were:
+
+1.  Data Preparation
+
+2.  Exploratory Data Analysis (EDA)
+
+3.  Predictive Analysis
+
+## **Linear Regression Data Preparation**
+
+The main goal of this section was to properly prepare the data for its analysis, but also, for creating a predictive model based on linear regression. This step is key for correctly processing the data in further stages of the project, and it includes several tasks that will be detailed.
+
+Firstly, the libraries employed were loaded, from libraries for plotting data and results, to libraries for regression analysis and training models.
+
+```{r global_options, include=T, echo = F}
+knitr::opts_chunk$set(echo = T, warning=FALSE, message=FALSE)
+```
+
+```{r}
+options(warn = -1)
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(corrplot)
+  library(caret)
+  library(car)
+  library(GGally)
+  library(readr)
+  library(ggplot2)
+  library(tidymodels)
+  library(lmtest)
+})
+options(warn = 0)
+```
+
+Afterwards, the dataset employed for the project was also loaded.
+
+```{r}
+data = read_csv("datasets/health_data.csv")
+```
+
+For understanding the dataset that was being used, it was necessary to revise its structure and dimensions, as well as to obtain an insight of the data. Then, the dataset contains 20000 rows and 54 columns of different categories, including numerical and categorical variables.
+
+```{r}
+dim(data)
+head(data)
+str(data)
+```
+
+Once these steps were completed, it was checked if there was any column that contained missing values (NA), as if that occurred, they should had been corrected. Nevertheless, there were no missing values in the dataset.
+
+```{r}
+names(data)[colSums(is.na(data)) > 0]
+data <- na.omit(data)
+names(data)[colSums(is.na(data)) > 0]
+```
+
+In addition, it was visually confirmed, by two histograms, if the application of a logarithmic transformation to the variable of interest ("Calories_Burned") was suitable for this project. The main goal of applying transformations to the data is to obtain an approximately normal distribution, with a Gaussian bell symmetric shape. 
+
+Despite the fact that both variables, logaritmically-transformed and non-transformed, did not have a perfectly symmetrical distribution, it was concluded that the logarithmic transformation enhanced significantly the model by further checks on its results, and henceforth, it should be applied.
+
+```{r}
+hist(data$Calories_Burned,
+     col = "darkblue",
+     main = "Histogram of Burned Calories",
+     xlab = "Burned Calories")
+data$Calories_Burned_log = log(data$Calories_Burned)
+hist(data$Calories_Burned_log,
+     col = "darkblue",
+     main = "Histogram of log(Burned Calories)",
+     xlab = "log(Burned Calories)")
+```
+
+Consequently, the data was divided into 2 different subsets, training and testing, for training the predictive model and further testing its efficiency unbiasedly. Hence, 80% of the original dataset was used as the training subset, while the remaining 20% was used as the testing subset.
+
+```{r}
+set.seed(123)
+train_index <- createDataPartition(data$Calories_Burned_log, p = 0.8, list = FALSE)
+
+train <- data[train_index, ]
+test  <- data[-train_index, ]
+```
+
+Once the dataset was split, a boxplot was generated for inspecting the presence of outliers in the training subset that could bias the training of the model.
+
+```{r}
+boxplot(train$Calories_Burned_log, main="Outliers in Calories Burned (logarithmic transformation)")
+```
+
+As represented in the previous figure, there were considerable outliers below the lower limit of the whisker of the boxplot (values that were lower than Q1 - 1.5·IQR), and as they could hinder the training of the model, they were identified and removed, which may be checked in the following figure.
+
+```{r}
+q1cb = quantile(train$Calories_Burned_log, 0.25)
+q3cb = quantile(train$Calories_Burned_log, 0.75)
+IQR = q3cb-q1cb
+uplimit = q3cb + 1.5*IQR
+lowlimit = q1cb - 1.5*IQR
+
+train_clean <- subset(train, 
+                                  Calories_Burned_log >= lowlimit & 
+                                    Calories_Burned_log <= uplimit)
+boxplot(train_clean$Calories_Burned_log, main="Calories Burned (logarithmic transformation) without outliers")
+```
+
+## **Linear Regression EDA (Exploratory Descriptive Analysis)**
+
+The aim of this section was to understand the structure, relationships, distributions and patterns within the data before modeling them. Therefore, it justifies the choice of predictors used in the regression model.
+
+For that purpose, a statistical summary of the training subset was printed, and it included the mean, median, quartiles, and maximum and minimum values for each numerical variable of the subset. This may be powerful for understanding the data dealed with.
+
+```{r}
+summary(train_clean)
+```
+
+Afterwards, numerical correlations of every numerical variable with the variable of interest ("Calories_Burned_log") were computed and they were sorted decreasingly. Correlations are statistical measurements that describe the relationship between two or more variables, and how they change together. It is measured with the correlation coefficient ( r ), and their values are between -1 and +1, where -1 is a perfect negative correlation, +1 a perfect positive correlation, and 0 no linear correlation.
+
+This step is key for determining which variables are highly related to "Calories_Burned_log", so that they can be later represented graphically, but also, introduced in the predictive model created for the project.
+
+```{r}
+corr_calories <- train_clean %>% 
+  select_if(is.numeric) %>% 
+  cor(use = "pairwise.complete.obs")
+
+corr_with_target <- corr_calories[,"Calories_Burned_log"] %>% 
+  sort(decreasing = TRUE)
+
+round(corr_with_target, 3)
+```
+
+Once these correlations were calculated, they were stored and filtered for only dealing with the most important ones. The threshold of the filter was set at 0.3, as absolute value, so that the variables selected were significantly correlated to "Calories_Burned_log". It is important to note that strong negative correlations should be also included, as they represent a type of relationship between variables in which when one of them increases, the other decreases. This may be seen with the case of "cal_balance", whose correlation with our variable of interest was -0.636, and this suggests that as the amount of burned calories increases, the total balance of calories decreases.
+
+```{r}
+valid_corrs <- corr_with_target[!is.na(corr_with_target) & names(corr_with_target) != "Calories_Burned_log"]
+
+high_corr_vars <- names(valid_corrs[abs(valid_corrs) > 0.3])
+
+vars_candidates <- train_clean %>%
+  select(all_of(c("Calories_Burned_log", high_corr_vars)))
+```
+
+For graphically understanding these relationships, a correlation matrix heatmap including the selected variables was plotted. This graph is a table with colour gradients that represents how strongly variables are correlated, as well as the type of correlation they have between them, so that the positive ones are represented with blue tones, while the negative ones are represented with red tones, and the more intense the colours are, the stronger the correlation is.
+
+```{r}
+corrplot(cor(vars_candidates, use = "pairwise.complete.obs"),
+         method = "color",
+         type = "upper",
+         diag = FALSE)
+```
+
+In this plot, by insight of the first row, it may be stated that the most powerful positive predictor identified by the correlation was "Session_Duration (hours)". By checking above its correlation coefficient, r = 0.821, then it is suggested that the longer the workout session is, the more calories are burned. Furthermore, it may be seen that "expected_burn" is also strongly correlated, but this variable should not be accounted for, as it will be further explained. Other variables show moderate positive correlations, like "Experience_Level" (r = 0.674) and "Workout_Frequency (days/week)" (r = 0.568), so that people with higher experience levels and those who work out more frequently tend to burn more calories per session. Moreover, there is a strong negative correlation between "Calories_Burned_log" and "cal_balance" (r = -0.636), so as explained before, the more calories burned, the lower the balance of calories. 
+
+However, not all the correlations selected above should be considered for this model, in order to avoid multicollinearity and data leakage. 
+
+Data leakage occurs when information about the target variable is included in other variables, so the model will perform biasedly well on the training data, and will fail in a real world scenario. "Calories_Burned" is the non-logarithmic transformation of the variable of interest, "Calories_Burned_log", so they contain the same information, but scaled differently, and hence, the model will memorize the target value instead of predicting it. The same occurs with "cal_balance", as its value uses "Calories_Burned" as a component (cal_balance = Intake - Calories_Burned). Lastly, "expected_burn" is not recommended to use, as it is very close to the value of "Calories_Burned" and it contains information that is not perfectly calculable before the session is completed and the actual calories are burned, so if it was used, then the model would be trained with the “given answer”, instead of creating rules for predicting.
+
+In addition, multicollinearity occurs when two or more predictor variables are highly correlated to each other in a regression model, so it makes the model’s coefficients uninterpretable and unstable. In this case, as "Calories_Burned" and "expected_burn" are nearly perfectly correlated with "Calories_Burned_log", they would also be highly correlated with any other effective predictor variables included in the model, but also, they would be perfectly correlated with each other and the target.
+
+Consequently, those mentioned variables were removed from the selected ones.
+
+```{r}
+vars_remove <- c("expected_burn", "cal_balance", "Calories_Burned")
+vars_candidates <- vars_candidates %>% 
+  select(-all_of(vars_remove))
+```
+
+Lastly, the selected potential predictors for the model were graphically represented based on their values of data.
+
+For the first graph, that represents the relationship between "Calories_Burned_log" and "Session_Duration (hours)", the strong positive linear trend was confirmed, so that when the duration of the session increases, so does the amount of burned calories, as predicted. Also, the points are tightly clustered around the line of best fit, which indicates minimal scatter and high correlation between these two variables.
+
+```{r}
+train_clean %>%
+  ggplot(aes(x = `Session_Duration (hours)`, y = Calories_Burned_log)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(title = "Calories Burned (logaritmic transformation) vs. Duration of the session (hours)",
+       x = "Duration of the session (hours)",
+       y = "Calories Burned (logaritmic transformation)") +
+  theme_minimal()
+```
+
+The second graph, that represents the relationship between "Calories_Burned_log" and "Workout_Frequency (days/week)", shows a positive trend, increasing from 2 to 5 days per week of exercise. Although individual points are highly dispersed, which may result in a lower correlation coefficient than the one for the duration of the session, the slope of the regression line confirms that the variable is a statistically significant predictor.
+
+```{r}
+train_clean %>%
+  ggplot(aes(x = `Workout_Frequency (days/week)`, y = Calories_Burned_log)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", col = "green") +
+  labs(title = "Calories Burned (logarithmic transformation) vs. Workout Frequency (days/week)",
+       x = "Workout Frequency (days/week)",
+       y = "Calories Burned (logarithmic transformation") +
+  theme_minimal()
+```
+
+Finally, the third graph shows a boxplot for the variables "Calories_Burned_log" and "Experience_Level", showing that there is a clear step-wise increase in the mean and median calories burned when the experience level increases from 1 to 3. Therefore, it may be concluded that "Experience_Level" is a strong categorical predictor that should be included in the model.
+
+```{r}
+train_clean %>%
+  mutate(Experience_Level_fct = as.factor(round(`Experience_Level`, 0))) %>% 
+  ggplot(aes(x = Experience_Level_fct, y = Calories_Burned_log, fill = Experience_Level_fct)) +
+  geom_boxplot() +
+  labs(title = "Calories Burned (logarithmic transformation) per Experience Level",
+       x = "Experiencie Level",
+       y = "Calories Burned (logarithmic transformation") +
+  theme_minimal()
+```
+
+## **Linear Regression Predictive Analysis**
+
+The main objective of this section is to quantify how each variable affects the outcome of the proposed linear model, which will allow the estimation of further results. Then, the predictive equation should be defined as:
+
+$$\hat{y} = \text{Calories_Burned}$$
+
+what will be later transformed into:
+
+$$\hat{y} = \text{log(Calories_Burned)}$$
+
+For this section of the linear regression model, the model was firstly executed without the logarithmic transformation of "Calories_Burned", which resulted in a non-linear relationship.
+
+```{r}
+non_log_model <- lm(formula = Calories_Burned ~ `Session_Duration (hours)` + `Workout_Frequency (days/week)` + Experience_Level + Gender + Workout_Type + Avg_BPM + `Weight (kg)`, data = train)
+
+summary(non_log_model)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(non_log_model)
+```
+
+This previous statement may be confirmed due to several reasons:
+
+In the first plot (upper left corner), the shape of the red line has a prominent curvature, what may suggest that the model is biased and that a non-linear relationship may show a better variance. Moreover, the dispersion of the points shown in the fourth plot (lower right corner), which is related to the variance of residuals, is not constant, so it may be observed that there is presence of heteroscedasticity, in which the variance changes as the adjusted value increases. In addition, the Q-Q residuals plot (upper right corner) confirms that the points only follow the diagonal line in the most centric region of it, while there is a considerable deviation in both tails, so consequently, the residuals do not follow a normal distribution. This is a remarkable point, as it does not fulfill one of the main ideas of linear regression, and thus, it affects the p-values and prediction intervals. Lastly, the third plot (lower left corner) reinforces the heteroscedasticity in the model, as the red line again shows curvature. All these arguments led to the conclusion that the model should be revised, and therefore, the logarithmic transformation of "Calories_Burned" may be a suitable choice.
+
+```{r}
+linFit_log <- lm(log(Calories_Burned) ~ `Session_Duration (hours)` + 
+                      `Workout_Frequency (days/week)` + 
+                      Experience_Level + 
+                      Gender + 
+                      Workout_Type +
+                      `Avg_BPM` + 
+                      `Weight (kg)`, 
+                  data = train)
+summary(linFit_log)
+```
+
+By applying the logarithmic transformation, the model results were enhanced. The multiple R-squared has a value of 0.9803, which is significantly high, and hence, 98.03% of the variability can be explained by the predictor variables included in the model, by adjusting to the training data, and also, confirming that all the variables included were relevant. Furthermore, the F-statistic has a value of 8.632e4, and a p-value lower than 2.2e-16, which allows the rejection of the null hypothesis in which all coefficients, except the intercept, are zero, and thus, it predicts burned calories better than a model that only uses the mean. Also, the residual standard error, which corresponds to the standard deviation of residuals (errors in the prediction), is 0.05493, that is a low value and suggests a very accurate fit. 
+
+By insight of the results, it may be stated that a one-hour increase in the session duration is associated with a predicted 148.5% increase in burned calories maintaining all other factors constant, confirming its massive impact. Note that, as dealing with logarithmic scales, then the interpretation is given by $e^{\text{estimate}}$ - 1 = $e^{0.9104}$ -1 = 1.485 = 148.5% . Also, workout type is a key factor in the model, so by having as a reference cardio workout, some exercises like HIIT increases the amount of burned calories by 38.8% ( $e^{0.3277}$ - 1 = 0.388) or strength exercises by 12.49% ($e^{0.1177}$ - 1 = 0.1249), while yoga decreases the amount by 25% ($e^{-0.2882}$ -1 = 0.250). In addition, experience level is important as well, because for every one-unit increase in the experience level, the predicted burned calories increases by 5.25% ($e^{0.05117}$ - 1 = 0.0525). Other variables, even though not as important as the aforementioned ones, are still relevant for the model, such as the workout frequency, that increases the amount of calories burned by the unit-increase per day of training by 0.5214% ($e^{0.0052}$ - 1 = 0.005214 ). 
+
+Finally, the intercept reflects the amount of calories burned when all the continuous predictors are zero, and all the categorical predictors are at their baseline level. The value of this intercept is 5.768, so by transforming it, it is obtained that $e^{5.768}$ = 319.98 . Then, the predictive equation may be given by:
+
+$$\hat{y} = 5,768 + 0,9104\cdot \text{Duration} + 0,0052 \cdot\text{Frequency} + 0,0512\cdot \text{Experience} + 0,3277\cdot\text{Type_Workout}$$
+
+$$+ 6,4\cdot10^{-5}\cdot\text{BPM} + 8,3\cdot10^{-5} \cdot \text{Weight}$$
+
+```{r}
+par(mfrow=c(2,2))
+plot(linFit_log)
+```
+
+Afterwards, the results of the new model were plotted, which resulted in confirming that the best choice was using the logarithmic transformation. In the first plot (upper left corner), the extreme curvature of the non-logarithmic model disappeared, and now residuals are distributed more randomly across the horizontal line. This suggests that the variance of residuals is more constant within the adjusted value range, and consequently, non-linearity and heteroscedascticity have significantly improved. In relation to the scale-location plot (lower left corner), the red line is almost flat and close to the horizontal one, confirming that residuals variance is now constant, so homoscedasticity is reinforced. Lastly, the Q-Q residuals plot (upper right corner) shows that the points now follow the diagonal line more closely than the previous model, specially in the most centric region, so that the residuals are more approximated to a normal distribution.
+
+In addition, it is essential to check the presence of multicollinearity in this model, so the VIF test was implemented. This test is a statistical tool for detecting multicollinearity in regression models, so that obatined values higher than 5 usually indicates that multicollinearity is present in the model, and thus, the variable is highly influenced by other variables.
+
+```{r}
+print(vif(linFit_log))
+```
+
+All the values of the VIF test lie between 1.00 and 2.15, which are below the 5-threshold, and hence, there is no considerable multicollinearity, what indicates that the included variables in the model represent independent information (they are not extremely correlated) and consequently, it confirms that the selection of them was successful.
+
+Moreover, the Breusch-Pagan (BP) test was also implemented for checking heteroscedasticity. This is a statistical test for analyzing heteroscedasticity in linear regression models, and then, the p-value is analyzed for discarding or accepting the null hypothesis of homoscedasticity.
+
+```{r}
+print(bptest(linFit_log))
+```
+
+The p-value is below 2.2e-16, which is a extremely low value, and then, it indicates that the null hypothesis of homoscedasticity should be rejected. Consequently, there is evidence of the presence of heteroscedasticity in the linear model. However, this is completely expectable, as the dataset contained highly diverse values, so the model is stable, with reliable coefficients (like the R-squared value), and it should also be underlined that the logarithmic transformation significantly reduced that problem, as it was observed and commented on previous plots.
+
+Furthermore, the AIC and BIC metrics were computed for checking if the developed model was efficient. Note that the evaluated model is considered to be better when these metrics have a lower score.
+
+```{r}
+AIC(linFit_log)
+BIC(linFit_log)
+```
+
+Both values are extremely low, what indicates that there is a very high adjustment of the linear logarithmic model and that it captures the real structure of the data avoiding overfitting. Hence, it can be said to be an efficient model.
+
+Finally, this last step was based on making predictions and computing the coverage of the model in the testing subset, as well as the back-transformations due to the implemented logarithmic scale. Predictions are essential for obtaining the most probable estimation of calories burned on a new subset of data. Hence, the accuracy of the model is evaluated with the R-squared value, and the higher that value, the better. On the other hand, prediction intervals are used for assessing the uncertainty of an individual prediction, and thus, showing an interval in which there is a specific percentage of confidence for which the value resides within it. Also, coverage measures the real percentage of observations that lied within the computed predicted intervals.
+
+```{r}
+#Prediction intervals for 95%
+pred_intervals_log <- predict(linFit_log, newdata = test, interval = "prediction", level = 0.95)
+
+#Back-transformation
+test$Pred <- exp(pred_intervals_log[, "fit"])
+test$Lower <- exp(pred_intervals_log[, "lwr"])
+test$Upper <- exp(pred_intervals_log[, "upr"])
+
+#R-squared calculation
+r_squared_test <- cor(test$Calories_Burned, test$Pred)^2
+print(paste("R² in the test subset (original scale):", round(r_squared_test, 4)))
+
+#Coverage calculation
+outside_interval_count <- sum(test$Calories_Burned < test$Lower | test$Calories_Burned > test$Upper)
+total_points <- nrow(test)
+coverage <- round(100 - (outside_interval_count / total_points) * 100, digits = 1)
+print(paste("Percentage of real points within the predicted intervals (coverage):", coverage, "%"))
+```
+
+The R-squared on the test subset showed a value of 0.9812, which represents the model’s point-wise accuracy on unseen data, so that 98.12% of the variability in burned calories in the test subset can be explained by the model. Hence, the model generalizes very well without suffering from overfitting. Moreover, the goal of computing prediction intervals is to evaluate the quality of the prediction confidence limits. In this case, the theoretical goal was set at 95%, so that 95% of the actual points are expected to fall within the predicted range. The model achieved a coverage of 93.8%, which is very close to the target value, and which demonstrates that the model is accurate in its central predictions, as well as in establishing the error bounds for individual predictions.
+
+# GLM
+
+## **The dataset**
+
+For this new section, the dataset employed was the same as the one used in the Linear Regression section, but the goal of the study had changed. Therefore, it was aimed to model the probability of having a high metabolic risk, measured with the Body Mass Index (BMI), through physical activity and dietary habits. BMI is a numerical measure that estimates a person’s body fat based on their weight and height. This value range is typically divided into 5 categories:
+
+-   Under 18.5, which will result in an underweight person
+
+-   Between 18.5 and 24.9, indicating normality
+
+-   Between 25 and 29.9, suggesting an overweight person
+
+-   Between 30 and 34.9, indicating an obese person
+
+-   Above 35, which will result in an extremely obese person
+
+Predicting this value is essential for health, as having a BMI value equal or higher than 25 may lead to several chronic diseases like type II diabetes, hypertension or cardiovascular diseases. 
+
+By modeling this probability, statistically significant variables on the effects of risk can be identified, as well as how the interaction between training frequency and diet type affects that risk. Therefore, the new target variable was “BMI_High_Risk”, which is a binary variable that was obtained by transforming the variable “BMI” to a binary one. Nevertheless, this will be further detailed.
+
+## **The goal**
+
+The goal of the second main section of this case study was to model the probability of high metabolic risk, which is measured by a BMI value equal or greater than 25. This was achieved by constructing a binomial logistic regression model in which the key steps followed were:
+
+1.  Data Preparation
+
+2.  Model Development And Interpretation
+
+3.  Predictive Performance
+
+## **GLM Data Preparation**
+
+Before developing the model, GLMs need to be defined for this section. GLMs, also known as Generalized Linear Models, are flexible statistical frameworks that extend linear regression to handle response variables that are not normally distributed. This takes place by using a link function, which provides the relationship between the linear predictor (quantity that incorporates the information about the independent variables into the model) and the mean of the probability distribution function.
+
+Firstly, the libraries used were loaded.
+
+```{r}
+options(warn = -1)
+suppressPackageStartupMessages({
+library(tidyverse)
+library(dplyr)
+library(effects)
+library(ggplot2)
+library(car)
+library(pROC)
+})
+options(warn = 0)
+```
+
+Now, categorical variables were converted to a factor type, as this allows the GLM function to automatically create the necessary dummy variables for regression. Therefore, some variables were selected, such as “Gender”, “diet_type”, “Workout_Type” and “Difficulty Level”. Also, they were renamed for simplicity purposes during the development of the model.
+
+Moreover, the target variable was defined by binarily converting the variable “BMI”, so that the values lower than 25 were redefined as 0, and the values larger or equal than 25 were redefined as 1. This step is extremely important, as the GLM desired to implement is a binomial logistic regression. If the variable had not been transformed, then it would still be a continuous numerical variable, which would lead to a linear regression problem for predicting the average BMI value. However, the main objective is not to predict the exact BMI value, but to predict the probability of risk when surpassing a health barrier. Therefore, the binary transformation is necessary.
+
+```{r}
+
+categorical_cols_new <- c("Gender", "diet_type", "Workout_Type", "Difficulty Level")
+
+data_clean <- data %>%
+
+  mutate(BMI_High_Risk = ifelse(BMI >= 25, 1, 0)) %>%
+  
+  mutate(across(.cols = all_of(categorical_cols_new), 
+                .fns = as.factor)) %>%
+  
+  rename(Workout_Frequency_dw = `Workout_Frequency (days/week)`,
+         Diet_Type = `diet_type`,
+         Difficulty_Level_cat = `Difficulty Level`)
+```
+
+Afterwards, a brief insight of the data, regarding the variables “BMI” and “BMI_High_Risk” was printed, and it may be checked that it was correctly transformed.
+
+```{r}
+str(data_clean$BMI_High_Risk)
+str(data_clean$BMI)
+```
+
+It is also important to understand the distribution of the variables of interest, and hence, their numerical values were represented in different tables, regarding the count and proportion of “BMI_High_Risk”, and comparative tables of the target variable with other implemented variables, such as “Workout_Type”, “Gender” and “Diet_Type”.
+
+```{r}
+table(data_clean$BMI_High_Risk)
+prop.table(table(data_clean$BMI_High_Risk))
+table(data_clean$BMI_High_Risk, data_clean$Workout_Type)
+table(data_clean$BMI_High_Risk, data_clean$Gender)
+table(data_clean$BMI_High_Risk, data_clean$Diet_Type)
+```
+
+Conclusively, it can be stated that there is a larger count and therefore, proportion of non-risky BMI values (55.49%) in comparison to risky BMI values (44.51%). In relation to the type of workout, the distribution is consistent across each type of exercise, but the class 0 counts are consistently higher than the ones for the class 1 in all the categories, which again occurs in the distribution per gender and type of diet.
+
+Also, it is important to graphically understand the distribution of the target variable, so the original and transformed target variables were plotted.
+
+```{r}
+ggplot(data_clean, aes(x = BMI)) +
+  geom_histogram(binwidth = 1, fill = "darkblue", color = "white") +
+  labs(title = "Distribution of BMI",
+       x = "BMI",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(data_clean, aes(x = BMI_High_Risk, fill = factor(BMI_High_Risk))) +
+  geom_histogram(binwidth = 1, color = "white") +
+  labs(title = "Distribution of BMI_High_Risk",
+       x = "BMI_High_Risk",
+       y = "Frequency",
+       fill= "BMI Risk Group") +
+  theme_minimal()
+```
+
+The graphical distribution of the binary BMI variable can be checked with the previously obtained values in the tables above, while for the original “BMI” variable, it might be stated that it is slightly right-skewed, thus confirming the obtained numerical values before.
+
+In addition, the target variable was plotted with the aforementioned variables, in order to visually confirm the obtained numerical values, as well as for further analysis purposes.
+
+```{r}
+data_clean %>%
+  ggplot(aes(x = Diet_Type, fill = factor(BMI_High_Risk, 
+                                          levels = c(1, 0),
+                                          labels = c("High Risk (BMI >= 25)", "Low Risk (BMI < 25)")))) +
+  geom_bar(position = "fill") + 
+  scale_fill_manual(values = c("High Risk (BMI >= 25)" = "#00BFC4", 
+                               "Low Risk (BMI < 25)" = "#F8766D")) + 
+  labs(title = "Proportion of Metabolic Risk per Die Type",
+       x = "Diet Type",
+       y = "Proportion of individuals",
+       fill = "Risk Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+data_clean %>%
+  ggplot(aes(x = Gender, fill = factor(BMI_High_Risk, 
+                                          levels = c(1, 0),
+                                          labels = c("High Risk (BMI >= 25)", "Low Risk (BMI < 25)")))) +
+  geom_bar(position = "fill") + 
+  scale_fill_manual(values = c("High Risk (BMI >= 25)" = "#00BFC4", 
+                               "Low Risk (BMI < 25)" = "#F8766D")) +  
+  labs(title = "Proportion of Metabolic Risk per Gender",
+       x = "Gender",
+       y = "Proportion of Individuals",
+       fill = "Risk Group") +
+  theme_minimal()
+```
+
+```{r}
+data_clean %>%
+  ggplot(aes(x = Workout_Type, fill = factor(BMI_High_Risk, 
+                                          levels = c(1, 0),
+                                          labels = c("High Risk (BMI >= 25)", "Low Risk (BMI < 25)")))) +
+  geom_bar(position = "fill") + 
+  scale_fill_manual(values = c("High Risk (BMI >= 25)" = "#00BFC4", 
+                               "Low Risk (BMI < 25)" = "#F8766D")) + 
+  labs(title = "Proportion of Metabolic Risk per Workout Type",
+       x = "Workout Type",
+       y = "Proportion of Individuals",
+       fill = "Risk Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+By insight of the graphs, the discussed distribution of the variables are confirmed.
+
+Lastly, a statistical summary of the target variable was printed, including its mean, median, quartiles, and maximum and minimum values. However, it is not as powerful as in the linear regression section, as the possible outcomes of the target variable are 0 or 1. Nevertheless, the summary reinforced the results obtained in the previous analysis.
+
+```{r}
+summary(data_clean$BMI_High_Risk)
+```
+
+## **GLM Model Development And Interpretation**
+
+Once the data preparation was finished, the model could be developed and interpreted. 
+
+The model implemented for this case study was a binomial logistic regression. The type of model is defined by the distribution of the target variable, and as it was binary, then the binomial distribution fitted the problem perfectly. Theoretically, the binomial distribution is a discrete probability distribution that describes a number of successes in a fixed number of independent trials, where each trial has only two possible outcomes. As our possible variable’s outcomes are 0 and 1, then the model is initially adequate for it. In the code, this was reflected on the line “family = binomial”. In addition, the model needs a link function for connecting the mean of the distribution (in this case P(Y=1), as this represents the probability of having metabolic risk) with the linear predictor. In this case, the “logit” link was employed, as the target variable is binary, and therefore, the use of this link function makes the interpretation of coefficients to be performed by Odds Ratios, due to the fact that:
+
+-   Linear predictor:
+
+    $$\eta = \beta_0 + \beta_1·X_1 + \dots$$
+
+-   Logit link:
+
+    ![](images/clipboard-222928915.png)
+
+-   Odds Ratios:
+
+    $$e^{\beta}$$
+
+Odds Ratios are statistical tools to measure how strongly an event is associated with an exposure, comparing the odds of the event happening in the exposed group versus the unexposed group. Hence, the model was designed for predicting the probability of an individual to have a high metabolic risk based on different variables, so it was executed and later, results were printed.
+
+```{r}
+logistic_mod_risk <- glm(BMI_High_Risk ~ Workout_Frequency_dw * Diet_Type + Age + Gender + Calories, 
+                        data = data_clean, 
+                        family = binomial(link = "logit"))
+```
+
+```{r}
+summary(logistic_mod_risk)
+```
+
+In relation to the formula of the model, it is given by:
+
+![](images/clipboard-3715218444.png){fig-align="center"}
+
+Consequently, by insights of the results, it may be appreciated that the model has a null deviance of 27484 and a residual deviance of 16524, which is considerably smaller and therefore, it suggests that the predictor variables significantly explain better the variance of the metabolic risk than a model that only included the intercept. Moreover, the beta coefficients are estimated through computing the Odds Ratios (OR), so an OR \> 1 leads to the fact that the variable increases the odds of metabolic risk, while an OR \< 1 reduces them. In addition, the results show that “Workout_Frequency_dw”, “Age” and “Calories” are significant predictors, and the conclusions drawn from them are:
+
+| Variable | Estimation ($\beta$) | Odds ratio (OR) | Conclusion |
+|------------------|------------------|------------------|------------------|
+| Workout_Frequency_dw | -0.3394 | 0.712 | By each extra day of workout per week, the odds of high metabolic risk reduces by 28.8% |
+| Age | 0.0095 | 1.010 | By each extra year of age, the odds of high metabolic risk increases by 1% |
+| Calories | 0.0045 | 1.0045 | By each extra unit of consumed calories, the odds of high metabolic risk increases by 0.45% |
+| Gender | 0.0100 | 1.010 | It is not significant, as the p-value = 0.79, so the gender itself is not an independent predictor in this model |
+
+Furthermore, there is another significant interaction in the model in relation to the diet type. This is the one between the workout frequency and the type of diet Paleo, which includes unprocessed foods, while reducing legumes, diary, refined sugars and processed items, in order to improve health by eliminating “modern” inflammatory foods. Hence, the coefficient of interaction ($\beta$ = -0.1660) is significant, with p = 0.0213, what confirms that the effect of the workout frequency over the metabolic risk is not the same for all diet types. Therefore, it may be indicated that:
+
+| Type of diet | Coefficient of workout frequency | Odds Ratio (OR) | Conclusion |
+|------------------|------------------|------------------|------------------|
+| Balanced | -0.3394 | 0.712 | Reduction by 28.8% of odds of having metabolic risks |
+| Paleo | -0.33394+ (-0.1660) = -0.5054 | 0.603 | Reduction by 39.7% of odds of having metabolic risks |
+
+Conclusively, these results underline the synergy between the Paleo diet and workout, suggesting that this combination may be crucial for avoiding metabolic risks.
+
+Due to these findings, a plot relating the probability of metabolic risk with the type of diet and the workout frequency was designed, so that:
+
+```{r}
+plot(effect("Workout_Frequency_dw:Diet_Type", logistic_mod_risk), 
+     ci.style = "band", 
+     multiline = TRUE, 
+     ylab = "P(BMI >= 25) - Predicted Probability", 
+     rug = FALSE, 
+     main = "Interaction of Frequency of Training and Type of Diet on Metabolic Risk")
+```
+
+By insight of the plot, the previously mentioned synergy is reinforced, as the Paleo diet is significantly separated from the rest by showing a fastest rate in the decrease of the probability of high risk as long as the workout frequency is increased (by examining the different lines, from the uppermost to the lowermost). Thus, this shows strong empirical evidence that the combination of a specific diet, such as Paleo, and workout frequency produces a multiplier effect in the prevention of high metabolic risk. Conversely, Vegetarian and Low-Carb diets show less steep slopes, indicating that the marginal benefit of extra exercise is smaller for them. Furthermore, the Y-intercepts (risk at zero training days) add complexity, suggesting that diets like Keto and Paleo may start with a higher initial risk probability than the reference diet. This is an aspect successfully captured by the logistic model.
+
+## **GLM Predictive Performance**
+
+The last main goal of this section was to demonstrate that the model is not only interpretable, but useful, so it is focused on probability prediction and confidence intervals.
+
+The value of a GLM lies in its ability to generate probability predictions and compute the uncertainty of those predictions, especially in risk contexts. Henceforth, the binomial GLM predicts the success probability ($\hat{P}(Y= 1)$), which is obtained by the transformation of the result of the linear predictor by the inverse logistic function. 
+
+In this case, a concrete profile was described, so that it was a 40 year-old man, who workouts 1 day per week and consumes 2500 cal, and whose diet is a Low-Carb one. Therefore, the predict() function was implemented for obtaining the prediction in the logit-scale, as well as the standard error, for further computing the confidence intervals.
+
+```{r}
+new_obs_risk <- data.frame(
+  Workout_Frequency_dw = 1, 
+  Diet_Type = factor("Low-Carb", levels = levels(data_clean$Diet_Type)),
+  Age = 40, 
+  Gender = factor("Male", levels = levels(data_clean$Gender)),
+  Calories = 2500
+)
+
+prediction_logit <- predict(logistic_mod_risk, 
+                            newdata = new_obs_risk, 
+                            type = "link", 
+                            se.fit = TRUE)
+
+log_odds_fit <- prediction_logit$fit
+se_fit <- prediction_logit$se.fit
+```
+
+Then, the z-value = 1.96 was implemented, as it is the one corresponding to a 95% confidence interval in a normal distribution. It is important to note that normal distribution is used as an approximation of the prediction standard error, consequently following the formula:
+
+$$\text{CI} = \text{Estimation} \pm \text{z}\cdot \text{Standard Error}$$
+
+```{r}
+z_val <- 1.96
+
+lower_logit <- log_odds_fit - z_val * se_fit
+upper_logit <- log_odds_fit + z_val * se_fit
+```
+
+For calculating the probability of the prediction, the inverse function was employed, such that:
+
+![](images/clipboard-3469337090.png){fig-align="center"}
+
+Once this was computed, then the main idea was to apply the previously defined ilogit() function to the confidence interval limits and to the predicted probability.
+
+```{r}
+ilogit <- function(x) {
+  exp(x) / (1 + exp(x))
+}
+
+pred_prob <- ilogit(log_odds_fit)
+lower_prob <- ilogit(lower_logit)
+upper_prob <- ilogit(upper_logit)
+
+cat("\n--- Prediction Results ---\n")
+cat("The predicted probability of having a BMI >= 25 for this individual is:", round(pred_prob, 4), "\n")
+cat(paste0("95% Confidence Interval for this probability: [", 
+           round(lower_prob, 4), ", ", round(upper_prob, 4), "]"))
+```
+
+Hence, the results were printed, showing that there is 95.09% of probability that the described profile has a high metabolic risk (BMI \>= 25), underlining the insights of previous sections in which a higher age, combined with low exercise frequency and a considerable amount of ingested calories generates an overwhelming risk. Furthermore, the 95% confidence interval was given by [0.9362, 0.9623], which is a narrow interval that shows the accuracy of the model. Moreover, the actual risk of this profile is firmly estimated around its predicted probability, which reinforces the robustness of the model by the significance of the predictors and through the odds ratios. Conclusively, the result is essential for decision making, as it will provide recommendations for a high-priority lifestyle upgrade for this at-risk population.
+
+Lastly, the ROC-AUC score was computed for reinforcing the considerable performance of the designed model. This score is a key metric for evaluating binary models, therefore representing the model's ability to distinguish between positive and negative classes, and this score ranges from 0.5 to 1.0.
+
+```{r}
+pred_full <- predict(logistic_mod_risk, newdata = data_clean, type="response") 
+
+response_full <- as.numeric(as.character(data_clean$BMI_High_Risk))
+
+roc_full <- roc(response_full, pred_full)
+plot(roc_full,
+     col = "blue",
+     lwd = 3,
+     main = "ROC Curve - Logistic Model")
+auc(roc_full)
+```
+
+As observed, the model obtained an AUC-ROC score of 0.8871, which suggests a considerable predictive capacity of this robust model for discriminating between the classes of the binary target variable. Consequently, it may be stated that the model correctly distinguishes the individuals who have a high metabolic risk due to a high BMI value from the ones that do not have that risk.
+
+# Conclusion
+
+As a conclusion, this project successfully implemented linear regression and GLM techniques to address key prediction challenges in digital wellness and personal fitness.
+
+In relation to the linear regression, the main objective was to predict the amount of burned calories, which was discovered to be significantly affected by several factors, like the duration of the workout session, the workout type and the experience level, all of them increasing that amount. Furthermore, the robustness and accuracy of the model were demonstrated, showing a strong generalization and a coverage of 93.8% for 95% confidence intervals. Consequently, this model is effective for designing personalized training plans.
+
+The GLM had as an objective to model the probability of an individual to have a high metabolic risk, accounting several factors like age, total daily ingested calories, diet type, and workout frequency, suggesting that these two last ones were highly powerful when combined. Then, a concrete case was described for predicting, in order to discover its potential for decision making and risk assessment. It showed that a 40 year old man with a Low-Carb diet and a low exercise frequency had a 95.09% of probability to have high metabolic risks. Consequently, this model is effective for providing valuable, actionable insights into how specific diets and exercise interact for influencing an individual's long-term health risk.

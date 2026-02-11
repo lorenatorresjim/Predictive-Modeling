@@ -1,0 +1,634 @@
+---
+title: "Homework 2: Sales Prediction"
+subtitle: "MSc Big Data Analytics — UC3M"
+author: "Lorena Torres Jiménez (100475834)"
+date: 19/01/2026
+
+output:
+  html_document:
+    theme: cerulean       
+    css: style_health.css
+    toc: true
+    toc_depth: 3      
+    toc_float: false
+    number_sections: true
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: true
+    toc: true
+    includes:
+      in_header:
+        - \usepackage{fontspec}
+        - \setmainfont{Times New Roman}
+        - \usepackage[margin=2.5cm]{geometry}
+---
+
+# **Introduction**
+
+In today's data-driven business environment, it is essential to accurately forecast product demand in order to optimize inventory management and to enhance operational efficiency. Hence, this assignment focuses on developing a robust predictive model for estimating weekly sales for a retail company, based on historical performance and various market indicators. The dataset employed contains detailed information on investment across multiple marketing channels, alongside control variables capturing business activity and macroeconomic conditions. Then, by leveraging Machine Learning algorithms, it is aimed to identify underlying patterns and seasonal trends that influence consumer behaviour, consequently gaining insights into the drivers of sales performance. Therefore, a structured modeling pipeline that combines exploratory data analysis and feature engineering, with the development of linear and regularized regression techniques, as well as advanced ensemble-based methods, was followed. Lastly, the best performing model was selected as the final model for generating predictions for unseen data.
+
+# **Dataset**
+
+The dataset employed in this assignment, "Real_Dataset_HW2.xlsx", is an excel file composed by 142 observations, that consists of weekly observations of sales, indexed by a Monday date, therefore covering a historical period of business activity. This variable was included with multiple explanatory variables related to marketing investments across different channels, calendar effects, and contextual factors. Then, the variables included were:
+
+-   Monday_date
+
+-   Sales
+
+-   Stores
+
+-   Affiliates_investment
+
+-   Meta_investment
+
+-   sea_brand
+
+-   sea_other_investment
+
+-   tiktok_investment
+
+-   web_visits
+
+-   GBP
+
+-   Database_investment
+
+-   OOH_investment
+
+-   TV_hbtv_investment
+
+-   TV_investment
+
+-   Radio_investment
+
+Hence, the target variable is "Sales", which represents the total weekly sales volume, and it is available only for the training observations, while it is missing for the test set used for prediction. Other variables may be considered to be explanatory, including marketing investment channels and affiliate marketing, which quantify the amount of resources allocated to each marketing channel, thus allowing the analysis of how different strategies contribute to sales performance. In addition, the dataset also includes control variables like the number of stores, website visits and the GBP exchange rate, which may directly influence sales performance.
+
+This dataset enables both predictive modeling and explanatory analysis, with particular emphasis on understanding the relationship between marketing investments and sales outcomes.
+
+# **Goals**
+
+The main goals of this assignment may be divided into two main objectives. Firstly, it is desired to build an accurate predictive model for the target variable ("Sales"), thus evaluating its performance using appropriate validation techniques. Secondly, it is sought to explain and interpret the relationship between the sales and the different investment variables, with special focus on understanding the impact of marketing expenditures.
+
+For this purpose, a range of Statistical Learning and Machine Learning techniques were applied, including linear regression models, regularization methods, ensemble models, and interpretability tools. Hence, the combination of predictive accuracy and explanatory analysis allowed the balance between performance and interpretability, aligning with the goals of predictive modeling.
+
+Therefore, the main followed steps were:
+
+1.  Data loading and preparation
+2.  EDA
+3.  Base models development
+4.  Advanced models development
+5.  Final predictions
+
+# **Data Loading And Preparation**
+
+The main goal of this section was to properly load the data for its processing and analysis, but also, for creating the proposed models and obtaining the desired predictions. This step is key for correctly processing the data in further stages of the project.
+
+Firstly, the libraries employed were loaded, from libraries for plotting data and results, to libraries for analysis and creating different Machine Learning models.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(glmnet)
+library(corrplot)
+library(caret)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(randomForest)
+library(gbm)
+library(pdp)
+```
+
+Afterwards, the dataset employed for the project was also loaded, which was in the first sheet of the excel file.
+
+```{r}
+df <- read_excel("Real_Dataset_HW2.xlsx", sheet = 1)
+```
+
+Then, it was ensured that the variable "Monday_date" had a date format, so that it could be correctly processed later.
+
+```{r}
+df$Monday_date <- as.Date(df$Monday_date)
+```
+
+Finally, for understanding the dataset that was being used, it was necessary to revise its structure and dimensions, as well as to obtain an insight of the data. Then, the dataset contains 142 rows and 15 columns of different categories, including numerical variables and a date-format variable.
+
+```{r}
+dim(df)
+head(df)
+str(df)
+```
+
+# **Exploratory Data Analysis (EDA)**
+
+The aim of this section was to understand the structure, relationships, distributions and patterns within the data before modeling them. Therefore, it justifies the choice of predictors used in the models created.
+
+For that purpose, a statistical summary of the training subset was printed, and it included the mean, median, quartiles, and maximum and minimum values for each numerical variable of the subset. This may be powerful for understanding the data dealed with.
+
+```{r}
+summary(df)
+```
+
+Afterwards, it was essential to analyze the presence of missing values (NAs) across all variables, as if that occurred, they should had been corrected. Then, the results revealed that missing values were only present in the target variable "Sales", corresponding exclusively to the observations in the testing dataset. However, it is important to note that no missing values were detected in explanatory variables, which allowed the use of the complete set of predictors for model training, without requiring imputation strategies, while naturally separating the data into training and testing sets based on the availability of the target variable.
+
+```{r}
+names(df)[colSums(is.na(df)) > 0]
+```
+
+Then, the distribution of the target variable was examined by using a histogram. The results indicated a slightly right-skewed distribution, with most observations concentrated around moderate sales values and fewer observations corresponding to very high sales weeks. This type of distribution is common in sales data and it suggests that linear modeling assumptions may be partially violated, thus motivating the use of non-linear and ensemble-based models in later stages of the analysis.
+
+```{r}
+ggplot(df %>% filter(!is.na(Sales)), aes(x = Sales)) +
+  geom_histogram(bins = 20, fill = "skyblue", color = "black") +
+  ggtitle("Distribution of Sales")
+```
+
+Moreover, different boxplots were plotted for exploring the presence of outliers in the investment-related variables that could bias the training of the model. Henceforth, several channels exhibited extreme values (beyond the whiskers of their respective boxplot), reflecting periods of unsually high marketing expenditure. However, these observations were not removed, as they represent realistic business decisions rather than data errors. Therefore, the presence of such outliers reinforced the need for robust modeling techniques, like tree-based methods and regularization approaches, which are less sensitive to extreme values compared to ordinary least squares regression.
+
+```{r}
+investment_vars <- df %>%
+  select(ends_with("investment"), Sales) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value")
+
+ggplot(investment_vars, aes(x = Variable, y = Value)) +
+  geom_boxplot(fill = "orange", alpha = 0.6) +
+  coord_flip() +
+  ggtitle("Boxplots of investment variables")
+```
+
+Furthermore, it is essential to gain insights into the relationship between sales and marketing investments, so for that purpose, a scatterplot was constructed for selected investment variables. By examining the graph below, it may be stated that TV investment shows a positive association with sales, even though the relationship seems to be non-linear, with diminishing marginal returns at higher investment levels.
+
+```{r}
+ggplot(df, aes(x = TV_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs TV Investment")
+```
+
+Furthermore, in order to gain insights on the relationships between the target variable and other investment-related variables, these were scatterplotted for visually analyzing them.
+
+```{r}
+ggplot(df, aes(x = TV_hbtv_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs TV HBTV Investment")
+
+ggplot(df, aes(x = tiktok_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs TikTok Investment")
+
+ggplot(df, aes(x = sea_other_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs SEA other Investment")
+
+
+ggplot(df, aes(x = Radio_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs Radio Investment")
+
+ggplot(df, aes(x = OOH_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs OOH Investment")
+
+
+ggplot(df, aes(x = Meta_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs Meta Investment")
+
+ggplot(df, aes(x = Database_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs Database Investment")
+
+ggplot(df, aes(x = Affiliates_investment, y = Sales)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Sales vs Affiliates Investment")
+```
+
+Consequently, investment variables captured the amount of resources allocated to different marketing channels, such as affiliates, Meta, SEA, SEA other, TikTok, Database, OOH, TV HBTV and Radio investments. They exhibited heterogeneous distributions and a strong right skeweness, with the majority of the weeks showing relatively moderate investment levels and a small amount periods characterized by intensive marketing activity. However, exploratory analysis indicated that investment variables were generally positively associated with Sales, although the relationship is often non-linear and subject to diminishing marginal returns at higher investment levels.
+
+Additionally, feature engineering plays an essential role in predictive modeling, as it allows the incorporation of domain knowledge and it helps models to capture relevant patterns more effectively. Therefore, based on the insights obtained from the EDA, several transformations and derived variables were introduced for improving both predictive performance and interpretability of investment effects, therefore capturing the relationship between marketing investments and sales.
+
+Firstly, it is important to note that the dataset included multiple variables representing marketing investments across different channels. Then, while each channel might have a distinct impact on sales, their combined effect can be also be relevant for capturing the overall intensity of marketing activity.
+
+For that purpose, a new variable, representing the total marketing investment, was created by aggregating all individual investment channels. Hence, it provided a global measure of marketing effort, and it allowed models to capture broad investment effects that may not be fully explained by individual channels alone.
+
+```{r}
+df <- df %>%
+  mutate(total_investment =
+           Affiliates_investment + Meta_investment + sea_brand +
+           sea_other_investment + tiktok_investment +
+           Database_investment + OOH_investment +
+           TV_hbtv_investment + TV_investment +
+           Radio_investment)
+```
+
+Also, marketing investment often exhibit diminishing marginal returns, which refers to the incremental increases in investment that tend to generate progressively smaller increases in sales. This behaviour is consistent with economic theory (e.g.: supply and demand law, so that the availability of a product and the desire for it determines its price) and it is commonly observed in advertising data. Consequently, these non-linear effects should be accounted, as well as the reduction of influence of extreme values, so that logarithmic transformations were applied to selected investment variables, such as "TV_investment", "Meta_investment", and total marketing investment ("total_investment").
+
+Therefore, the use of the log(1+x) transformation ensures numerical stability and it allows the inclusion of zero-investment observations, which improves the robustness of the developed model by reducing skewness in the input variables, as well as it helps to better approximate non-linear relationships.
+
+```{r}
+df <- df %>%
+  mutate(
+    log_TV = log1p(TV_investment),
+    log_Meta = log1p(Meta_investment),
+    log_total_inv = log1p(total_investment)
+  )
+```
+
+Lastly, the data was divided into 2 different subsets, training and testing, for training the predictive model and further testing its efficiency unbiasedly. Hence, the training subset was formed by rows in which the "Sales" variable had a value distinct from NA, while the testing subset contained those rows in which the target variable had a value of NA, in order to further predict those values throughout the assignment.
+
+```{r}
+train_df <- df %>% filter(!is.na(Sales))
+test_df <- df %>% filter(is.na(Sales))
+```
+
+# **Base Models**
+
+The main goal of this section is to design simple and interpretable models for gradually incorporating more flexible and powerful techniques, thus following a progressive approach. This will allow the balance between interpretability and predictive performance, while also assessing the added value of more advanced methods. All models were trained using the training subset only, and model performance was evaluated using cross-validation and the Mean Absolute Error (MAE), aligning with the competition criterion previously defined.
+
+### Linear Regression
+
+Firstly, a multiple linear regression model using selected investment variables and relevant control variables was estimated. This baseline model is used for two main purposes, which includes providing an interpretable framework for properly understanding the relationship between sales and marketing investments, and establishing a reference level of predictive performance.
+
+Despite its simplicity, linear regression offers valuable insights into the direction and relative magnitude of investment effects. Nevertheless, accounting for the presence of correlated predictors, skewed distributions, and potential non-linear relationships, the model was not expected to fully capture the complexity of the data.
+
+```{r}
+lm_model <- lm(
+  Sales ~ log_TV + log_Meta + sea_brand +
+    Radio_investment + web_visits + Stores,
+  data = train_df
+)
+
+summary(lm_model)
+```
+
+By insight of the printed results above, some conclusions may be drawn from them, such as that the 40% of the variability in weekly sales was explained by this model, with an adjusted R-squared value of 0.3735 and multiple R-squared value of 0.4059. Knowing that sales and marketing data was being dealed with, this variability percentage is acceptable, even though it may be further improved. Also, the F-statistic had a value of 12.53 and a p-value of 1.012e-10, demonstrating that the model is globally significant, and that at least one of the explanatory variables is related to the target variable, hence contributing to explaining sales dynamics.
+
+Moreover, among the explanatory variables, TV investment was the most significative variable of the model, with a coefficient of 77.3, which indicates that an increase of 1% in TVs is associated with an approximate increase of 0.77 units of "Sales", while keeping the rest constant. Thus, it was confirmed the strong relationship between TV advertising and sales. Brand-related SEA investment ("sea_brand") also exhibited a statistically significant positive effect (at 5%), therefore suggesting that brand search visibility directly contributes to the comercial performance. However, other variables, like Meta investment, radio investment, and the number of stores, did not appear to be statistically significant within the linear framework.
+
+Consequently, the lack of significance for several predictors may be attributed to multicollinearity (which refers to the fact that two or more independent variables are highly correlated), non-linear effects or interactions not captured by the linear model. These limitations motivated the use of regularization techniques and non-linear Machine Learning models in subsequent sections.
+
+### Stepwise Regression With AIC Criterion
+
+Afterwards, in order to reduce model complexity and mitigate overfitting, a stepwise regression procedure based on the Akaike Information Criterion (AIC) was applied. This criterion is a statistical metric that is commonly computed for checking if the developed model is efficient. Note that the evaluated model is considered to be better when this metric has a lower score. Then, this approach aims to add and remove predictors iteratively for identifying a parsimonious subset of variables that balances goodness of fit and model simplicity.
+
+Henceforth, stepwise selection allowed to retain the most relevant predictors while discarding redundant information, therefore improving interpretability and stability compared to the full linear model. Nevertheless, it is a heuristic method, so that it does not always yield optimal predictive performance, concretely in high-dimensional or highly correlated settings.
+
+```{r}
+full_model <- lm(Sales ~ . - Monday_date, data = train_df)
+
+step_model <- step(full_model, direction = "both", trace = FALSE)
+
+summary(step_model)
+```
+
+By observing the obtained results, the implementation of the AIC criterion combined with the stepwise regression considerably improved the explanatory power of the model compared to the baseline linear model previously developed, therefore achieving an adjusted R-squared of 0.6285 and a multiple R-squared value of 0.6669. This indicates that the model almost explain the 67% of variability of the target variable, which supposes a substantially increase with respect to the linear regression baseline model (approximately 40%). Moreover, the residual standard error was approximately 410, which is clearly lower than the one obtained for the baseline model (approximately 532), suggesting a more precise adjustment and a better overall fit, and lastly, the F-statistic and the p-value showed that the model was globally, highly significant.
+
+In addition, the results confirmed the main role of TV investment, particularly when modeled through logarithmic transformations ("log_TV"), as a key driver of sales, due to its positive and significant coefficient. Also, digital and performance-based channels, like affiliates and web traffic exhibited significant positive effects, as well as macroeconomic conditions, mainly ruled by the GBP exchange rate, which appeared to play a relevant role in explaining sales variability.
+
+Contrastingly, the coefficient associated with total marketing investment is negative once individual channels were controlled for. Hence, once specific investments were controlled, such as TV, the increase in the total aggregate expenditure may reflect inefficiencies or diminishing returns, advertisement saturation or budget redistribution to less effective channels, therefore highlighting the optimal budget allocation, rather than total spending alone.
+
+However, despite the strong explanatory performance of the stepwise model, it remains a linear approximation that may still be affected by multicollinearity and unmodeled non-linear effects. These aspects motivate the use of regularization techniques and ensemble-based Machine Learning models in the posterior analysis.
+
+### Lasso, Ridge And Elastic Net Regression
+
+For the last approach of this section, Lasso regression was applied, which is a type of linear regression that uses regularization to improve model accuracy and interpretability by adding penalties for having too many or too large variables. This penalty is referred to as L1, and it reduces coefficients, even shrinking some of them to exactly 0, while it performs automatically variable selection, and it has the mathematical form of:
+
+$$Cost = \sum_{i=1}^{n} (y_i-\hat{y}_i)^2 + \lambda\sum_{j=1}^{p}|\beta_j|$$
+
+In which the first term refers to the Residual Sum of Squares (RSS) and it measures how well the model fits the data, $\lambda$ is a tuning parameter that controls the strength of the penalty and prevents the overfitting of the model, and $|\beta_j|$ is the L1 norm, which is the absolute value of each coefficient.
+
+Note that Lasso was combined with Ridge regression and Elastic Net regression for introducing extra penalty terms that reduced the variance at the cost of introducing some bias in the model. Nevertheless, the both aforementioned methods should be defined:
+
+Ridge regression is a technique for analyzing multiple regression data that suffer from multicollinearity. Then, it adds a penalty term (noted as L2) to the model for having large coefficients, forcing them to shrink toward 0. Compared to the Lasso regression, this one modifies the standard cost function by replacing the L1 penalty term by the L2, being defined as:
+
+$$Cost = \sum_{i=1}^{n}(y_i-\hat{y_i})^2 + \lambda\sum_{j=1}^p \beta_j^2$$
+
+In this case, the RSS term remains equal, but if $\lambda = 0$, a linear regression is obtained, while if $\lambda \to \infty$, the coefficients $\beta$ shrink closer and closer to 0, but never exactly to 0. Also, $\beta_j^2$ is L2 norm, so that it is the penalty on the squared magnitude of the coefficients. Hence, all features are retained in the final model, just with reduced influence, and with a small amount of introduced bias in exchange for significant reduction in variance, so that the model is much more stable and generalizes better on unseen data.
+
+On the other hand, Elastic Net regression is an hybrid solution that combines best of both Lasso and Ridge regression. Therefore, the Lasso part (L1 term) performs feature selection by shrinking unimportant coefficients all the way to 0, while the Ridge part (L2 term) handles multicollinearity by shrinking coefficients of related variables together, rather than choosing one and discarding the others. This idea is mathematically defined as:
+
+$$Loss = MSE + \lambda_1\sum|b_j| + \lambda_2\sum b_j^2$$
+
+Note that in R-studio, this is controlled by 2 main hyperparameters, which are:
+
+-   Alpha $(\alpha)$: the overall strength of the penalty.
+
+-   L1 Ratio: the balance between Lasso and Ridge regressions, so that if Ratio = 1, it is pure Lasso regression, while if it is Ratio = 0, it is pure Ridge regression. Hence, anything in between, for example 0.5, is Elastic Net.
+
+This type of regression is commonly used for keeping or reducing the whole group of highly correlated variables, instead of choosing one, as Lasso regression does, but also, it is used when the $p>n$ problem is presented, so that a larger amount of variables in comparison to the number of observations is presented. In the case of Lasso, if having 1000 features and 100 data points, a maximum of 100 features could have been chosen, while the Elastic Net does not present this saturation limit, and more features may be chosen if they were relevant.
+
+In the table below, a summary of the 3 mentioned regressions is presented:
+
+| Feature | Lasso | Ridge | Elastic Net |
+|----|----|----|----|
+| Penalty | L1 (Absolute) | L2 (Squared) | Both L1 and L2 |
+| Feature selection | Yes | No | Yes |
+| Handles correlation | Poor, as it only picks one variable | Well, as it shrinks all variables | Best, as it shrinks variables as a group |
+| Complexity | Simple (1 parameter to tune) | Simple (1 parameter to tune) | Moderate (2 parameters to tune) |
+
+: Regressions Summary
+
+Then, regularization parameters (hyperparameters) were selected via cross-validation for minimizing prediction errors, and the obtained results for all these regressions were printed.
+
+```{r}
+#Regularization (matrix preparation)
+X <- model.matrix(Sales ~ . - Monday_date, train_df)[, -1]
+y <- train_df$Sales
+
+#Ridge Regression
+set.seed(123)
+cv_ridge <- cv.glmnet(X, y, alpha = 0)
+ridge_model <- glmnet(X, y, alpha = 0, lambda = cv_ridge$lambda.min)
+coef(ridge_model)
+
+#Lasso Regression
+cv_lasso <- cv.glmnet(X, y, alpha = 1)
+lasso_model <- glmnet(X, y, alpha = 1, lambda = cv_lasso$lambda.min)
+coef(lasso_model)
+
+#Elastic net
+cv_enet <- cv.glmnet(X, y, alpha = 0.5)
+enet_model <- glmnet(X, y, alpha = 0.5, lambda = cv_enet$lambda.min)
+coef(enet_model)
+```
+
+By insight of the results, some conclusions may be drawn:
+
+With respect to Ridge regression, all variables remained in the model, thus shrinking coefficient estimates, what makes this method particularly suitable when multicollinearity is present. Then, it is highlighted the dominant role of logarithmic TV and Meta investments, which maintained the largest coefficients even after penalization. Digital and performance-based channels, like affiliates, TikTok and branded search, contributed positively to sales, although with smaller magnitudes compared to TV-related variables. Hence, this model distributed explanatory power across correlated predictors, rather than selecting a sparse subset, which may enhance predictive stability at the expense of interpretability. Conclusively, Ridge regression provided a robust alternative to ordinary least squares, thus reducing variance while preserving full information content of the dataset.
+
+Regarding Lasso regression, it may be stated that the variables with a "." symbol on its coefficient were removed from the model, as they were not considered to be informative. Consequently, a relatively small subset of predictors were considered to be the most relevant drivers of sales. Consistent with previous models, logarithmic transformations of TV and Meta investments were retained, thus reinforcing their importance once multicollinearity was controlled for. Also, performance-based and digital channels, such as affiliates, TikTok and branded search remained in the model, which suggests their incremental contribution to sales. However, as aforementioned, several redundant variables, including the number of stores and aggregated investment measures, were excluded by the Lasso penalty, indicating that these predictors did not provide additional explanatory power once more informative and less correlated variables were included. Conclusively, the Lasso model offered a parsimonious and robust alternative to stepwise regression, balancing interpretability and predictive performance while mitigating multicollinearity issues.
+
+In relation to Elastic Net regression, Lasso and Ridge regressions were combined for performing coefficient shrinkage and variable selection, what is efficient when having a large amount of highly correlated predictors, like in multichannel marketing. Henceforth, the obtained results confirmed the relevance of a core set of predictors, including logarithmic transformations of TV and Meta investments, digital performance channels and macroeconomic controls. If compared to Lasso, this regression retained a slightly broader set of variables while maintaining sparsity, which led to more stable coefficient estimates when correlated predictors are present. However, variables like untransformed TV investment and aggregated investment measures were excluded, thus reinforcing the importance of appropriate feature transformations. Conclusively, Elastic Net offered a balanced compromise between interpretability and predictive stability, making it a solid candidate for final model selection.
+
+### Summary
+
+Summarizing all the implemented regression methods, a table was designed for synthesizing their main characteristics and obtained results:
+
+| Method | Variable selection | Handles multicollinearity | Interpretability | Key identified variables |
+|----|----|----|----|----|
+| Linear regression | No | Limited | High | "log_TV", "sea_brand" |
+| Stepwise regression with AIC criterion | Yes | Partially | High | "log_TV", "GBP", "web_visits", "TV_hbtv", "affiliates" |
+| Lasso regression | Yes, with L1 | Yes | Medium | "log_TV", "GBP", "web_visits", "TikTok", "log_Meta" |
+| Ridge regression | No, as it implements L2 | Yes | Low-medium | "log_TV", "GBP", "TikTok", "log_Meta" |
+| Elastic Net regression | Yes, with L1 and L2 | Yes | Medium | "log_TV", "GBP", "web_visits", "TikTok", "log_Meta" |
+
+: Implemented Regression Methods Summary
+
+Across all methods, a consistent set of variables were highlighted as key drivers of sales, specially logarithmic transformation of TV and Meta investments, selected digital channels, such as TikTok, and macroeconomic controls, like the GBP exchange rate. Note that this consistency reinforces the reliability of the identified relationships and underlines the importance of both feature engineering and regularization in marketing analytics.
+
+# **Advanced Models**
+
+The main goal of this section is to develop advanced Machine Learning models, concretely ensemble-based methods, that could further improve the prediction accuracy provided by the base models developed in the previous section, for later being selected as the best predictive algoritm according to their corresponding Mean Absolute Error.
+
+While linear and regularized models provided interpretability, they may struggle to capture complex non-linear patterns and interactions between predictors. With the purpose of overcoming these limitations, ensemble-based Machine Learning models were employed, concretely, Random Forests and Gradient Boosting Machines (GBM). Ensemble methods are algorithms that combine multiple models to create a more accurate and stable result than any base model could achieve on its own.
+
+### Random Forests
+
+Random Forests is an algorithm that builds a forest composed of many individual decision trees, which are individually trained on a random sample of the data (bagging technique). Also, each tree is only allowed to look at a random subset of the features of the data for finding the best split, thus preventing overfitting of the model. Lastly, for predicting the output, the algorithm takes the average of all the tree's prediction, as numerical variables are being dealed with. This approach is robust to outliers, as it captures non-linear effects, and it naturally handles interactions between variables.
+
+```{r}
+set.seed(123)
+rf_model <- randomForest(
+  Sales ~ . - Monday_date,
+  data = train_df,
+  ntree = 500,
+  importance = TRUE
+)
+
+rf_model
+```
+
+```{r}
+varImpPlot(rf_model)
+```
+
+This figure shows the importance of variables in the Random Forest model by using two complementary metrics: %IncMSE and IncNodePurity. However, these metrics should be firstly adressed:
+
+-   %IncMSE measures the porcentual increase of the prediction error when the values of a variable are randomly permutated. Then, a higher value indicates that the variable is essential for the predictive capacity of the model, while a lower one suggests that it is not remarkably important.
+
+-   IncNodePurity measures the total reduction of the node impurity (RSS) attributed to each variable throughout all trees. Hence, it captures how a variable contributes to dividing the prediction space.
+
+Therefore, even though these metrics may differ in their scales, a variable that is suggested to be important by both metrics may be considered a robust driver. In this case, the GBP exchange rate emerged as the most influential predictor for both metrics, highlighting the relevance of macroeconomic conditions in explaining sales variability. Note that this result is consistent with the linear and regularized models, what reinforces its structural role. Other remarkable variables were the total investment and its logarithmic transformation, so that the investment aggregate level is indicated and their scales capture the non-linear patterns that linear models can only partially approximate them. This clearly checks the diminishing marginal returns at higher spending levels hypothesis previously detected. Another underlined variables were TV-related variables, which confirmed the central role of TV advertising, while suggesting the presence of non-linear effects and interactions. Moreover, the coexistence of transformed and non-transformed variables suggests that the TV impact varies according to the level of investment. Furthermore, web visits performed consistently well on the %IncMSE metric, thus reinforcing its role as an intermediate variable between marketing activity and sales outcomes, which is consistent with the stepwise and regularization results. Lastly, other variables showed a moderate importance, so that, even though their individual impact may be lower, Random Forest is able to capture complex interactions in which these variables may have an essential role, thus improving predictive performance at the cost of reduced interpretability. Note that these results further validate the robustness of the key drivers identified throughout the analysis.
+
+### Gradient Boosting
+
+Gradient Boosting is another advanced ensemble Machine Learning technique that builds a powerful predictive model by combining other base models (in this case, decision trees) sequentially, with each new base model designed to fix the mistakes of the previous ones. Hence, it starts with a very simple prediction and then it computes the residuals ($Error = Actual - Predicted$). Afterwards, a weak learner, e.g.: small decision tree, is trained for predicting the errors from the previous step, and the model is updated by adding the new prediction to the previous prediction, which is controlled by a learning rate for preventing the overshooting of the target. This process is repeated until the error is minimized. However, some techniques for preventing overfitting, such as early stopping, can be implemented. This one monitors the performance on a validation set during training iterations and it stops training when no improvement is observed for several rounds.
+
+Consequently, the model was developed and some interesting results were printed.
+
+```{r}
+set.seed(123)
+gbm_model <- gbm(
+  Sales ~ . - Monday_date,
+  data = train_df,
+  distribution = "gaussian",
+  n.trees = 3000,
+  interaction.depth = 3,
+  shrinkage = 0.01,
+  cv.folds = 5
+)
+
+best_iter <- gbm.perf(gbm_model, method = "cv")
+```
+
+The figure above shows the behaviour of the squared error loss across the iterations that the model performed. This error measures the cost of a prediction error, so that:
+
+$$L = (y- \hat{y})^2$$
+
+With $y$ being the actual value and $\hat{y}$ the predicted value. Hence, this error penalizes large mistakes much more than small ones, which is key in Machine Learning algorithms. Then, the black curve corresponds to the training error, that monotonously decreases as long as trees are added, while the green curve represents the validation error (it estimates how well the model performs on unseen data), which initially decreases, and afterwards, it tends to stabilize. Furthermore, the vertical dashed line indicates the optimum number of iterations, which is selected for effectively preventing the overfitting of the model, while demonstrating a strong predictive performance. Hence, the evolution of training and validation error confirmed that the selected number of iterations achieved an appropriate balance between bias and variance. Note that this pattern is typically found in Gradient Boosting algorithms, which confirms the importance of early stopping as a regularization mechanism.
+
+```{r}
+importance <- summary(gbm_model, n.trees = best_iter, plotit = FALSE)
+
+ggplot(importance, aes(x = reorder(var, rel.inf), y = rel.inf)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Variable Importance", x = "Variables", y = "Relative Influence") +
+  theme_minimal()
+```
+
+```{r}
+summary(gbm_model, n.trees = best_iter, plotit = FALSE)
+```
+
+In addition, the relative influence of the variables, thus evaluating their importance and contribution to the final model, was analyzed by a graph and a proper table. The key drivers of this summary were the GBP exchange rate, with a 33.43407% of influence, and the total investment, with a 16.20258% of influence. The GBP exchange rate was the most influential predictor by a wide margin, which reinforced the central role of the macroeconomic conditions in the explanation of sales; a result that is totally consistent with previous regularized models and Random Forests. Also, the total investment relevance confirmed that the investment aggregate level captured relevant non-linear patterns, therefore complementary to the previous evidence over diminishing returns. Again, other variables with moderate influence, such as key digital and TV-related channels also contributed meaningfully to the model's predictions. Moreover, other variables such as affiliates, OOH, or TikTok presented a lower relative influence, but the model may use them in specific combinations for improving the predictions.
+
+Unlike linear and regularized models, the Gradient Boosting approach naturally captured non-linearities, which explained why logarithmic transformations of investment variables received zero relative influence. Overall, the obtained results were consistent with previous findings, and it provided additional flexibility and predictive power.
+
+To further interpret the non-linear models, a partial dependence plot was computed for TV investment, which illustrates the marginal effect of TV spending on predicted sales while averaging out the influence of all other variables.
+
+```{r}
+pdp_tv <- partial(
+  rf_model,
+  pred.var = "TV_investment",
+  train = train_df
+)
+
+plot(pdp_tv, main = "Partial Dependence: TV Investment")
+```
+
+The obtained graph revealed a clear non-linear relationship between TV investment and sales. Hence, at lower levels of investment, increases in TV spending are associated with substantial gains in sales, but beyond a certain threshold (approximately 70000), the marginal impact gradually diminishes, thus indicating the presence of diminishing returns. Note that this pattern is consistent with economic theory, and therefore, it aligns with previous findings obtained from logarithmic transformations and regularized models. Therefore, the partial dependence analysis provided additional evidence that optimal budget allocation is more important than simply increasing total TV expenditure.
+
+#### Impact Of Marketing Investments On Sales
+
+To further interpret the final Gradient Boosting model, a ranking of marketing investment variables was computed based on their relative influence on weekly sales predictions. Hence, this analysis provides a quantitative assessment of how different channels contributed to the model's predictive performance, which allowed a more detailed understanding of the effectiveness and strategic importance of each type of marketing expenditure.
+
+```{r}
+investment_vars <- c(
+  "Affiliates_investment",
+  "Meta_investment",
+  "sea_other_investment",
+  "tiktok_investment",
+  "Database_investment",
+  "OOH_investment",
+  "TV_hbtv_investment",
+  "TV_investment",
+  "Radio_investment",
+  "total_investment",
+  "log_total_inv"
+)
+
+investment_ranking <- importance %>%
+  filter(var %in% investment_vars) %>%
+  arrange(desc(rel.inf))
+
+print(investment_ranking)
+```
+
+```{r}
+ggplot(investment_ranking, 
+       aes(x = reorder(var, rel.inf), y = rel.inf)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Ranking of Marketing Investment Variables by Relative Influence (GBM)",
+    x = "Investment Variable",
+    y = "Relative Influence (%)"
+  ) +
+  theme_minimal()
+```
+
+By observing the results, total marketing investment resulted to be the most influential predictor, accounting for approximately 16.20258% of the model's relative influence. This suggested that the overall intensity of marketing activity plays a dominant role in driving sales, then capturing aggregate effects that may not be fully explained by individual channels alone. This reinforced the relevance of considering both disaggregated and aggregated investment measures when modeling complex multichannel marketing environments. Among individual channels, TV investment emerged as the strongest driver of sales, with a 7.6072% of relative influence, followed by Meta investment (5.23792%) and TV HBTV investment (4.48817%), which highlighted the continued importance of both traditional mass-media channels and large-scale digital platforms in shaping costumer demand. Note that this is consistent with the non-linear patterns and diminishing returns previously identified through partial dependence analysis. Furthermore, performance-oriented digital channels, like Affiliates (4.01499%) and SEA other (4.43362%), also contributed meaningfully to sales predictions, suggesting that targeted and intent-driven marketing strategies provided incremental value beyond awareness campaigns.
+
+Contrastingly, more specialized or support channels, like OOH, Database, Radio and TikTok investments, exhibited lower relative influence, thus indicating a more marginal but complementary role within the overall marketing mix. From a managerial perspective, these results imply that sales performance was primarily driven by the scale of total marketing effort and high-reach channels, while performance-based digital investments enhanced efficiency at the margin. Consequently, an optimal budget allocation strategy should balance strong baseline investment in dominant channels, such as TV and Meta, with targeted digital campaigns that improve conversion and responsiveness, rather than only focusing on increasing total spending.
+
+# **Final Predictions**
+
+The main goal of this section is to compute the Mean Absolute Error (MAE) for all of the previously developed models, in order to rank them according to that metric performance and interpretability, and choose the best one for making predictions, as required by the competition. Consequently, that selected method will be the one that will be used for addressing the predictions on the "Monday_date" variable on the training dataset, which was empty, and they will be exported as a CSV file.
+
+Firstly, for addressing the final predictions of the model, all the previously deployed models were evaluated by using the metric MAE, which refers to the Mean Absolute Error. This can be mathematically formulated as:
+
+$$MAE = (1/n)· \sum_{i=1}^n |y_i - \hat{y_i}|$$
+
+Where $y_i$ is the actual value and $\hat{y_i}$ is the predicted value. Hence, this metric is highly useful due to the fact that, contrastingly to MSE (Mean Squared Error), MAE is expressed in the same units as the target variable. Therefore, this provides an interpretable measure of average prediction error in sales units, which is more meaningful for business decision-making than squared-error metrics. Consequently, all the methods were tested via cross-validation for making the corresponding desired predictions and the results were summarized below. It is important to note that, the lower the MAE obtained, the better, what will indicate that the model is much more precise and accurate, regarding the predictions made.
+
+```{r}
+mae <- function(actual, predicted) {
+  mean(abs(actual - predicted))
+}
+```
+
+```{r}
+#Linear regression
+pred_lm <- predict(lm_model, newdata = train_df)
+mae_lm <- mae(train_df$Sales, pred_lm)
+
+#Stepwise regression
+pred_step <- predict(step_model, newdata = train_df)
+mae_step <- mae(train_df$Sales, pred_step)
+
+# Lasso regression
+pred_lasso <- predict(lasso_model, s = "lambda.min", newx = X)
+mae_lasso <- mae(train_df$Sales, pred_lasso)
+
+# Ridge regression
+pred_ridge <- predict(ridge_model, s = "lambda.min", newx = X)
+mae_ridge <- mae(train_df$Sales, pred_ridge)
+
+# Elastic Net
+pred_elastic <- predict(enet_model, s = "lambda.min", newx = X)
+mae_elastic <- mae(train_df$Sales, pred_elastic)
+
+#Random Forests
+pred_rf <- predict(rf_model, newdata = train_df)
+mae_rf <- mae(train_df$Sales, pred_rf)
+
+#Gradient Boosting
+pred_gbm <- predict(
+  gbm_model,
+  newdata = train_df,
+  n.trees = best_iter
+)
+mae_gbm <- mae(train_df$Sales, pred_gbm)
+```
+
+```{r}
+model_comparison <- data.frame(
+  Model = c(
+    "Linear Regression",
+    "Stepwise Regression",
+    "Lasso",
+    "Ridge",
+    "Elastic Net",
+    "Random Forest",
+    "Gradient Boosting"
+  ),
+  MAE = c(
+    mae_lm,
+    mae_step,
+    mae_lasso,
+    mae_ridge,
+    mae_elastic,
+    mae_rf,
+    mae_gbm
+  )
+)
+
+model_comparison <- model_comparison %>%
+  arrange(MAE)
+
+print(model_comparison)
+```
+
+By insight of the table above, it can be stated that Gradient Boosting is the best model, with a MAE of 123.8732, which substantially improves predictive accuracy with respect to the rest of the alternatives. Hence, this superior performance may be attributed to the fact that it captures complex non-linearities, interactions between predictors, and diminishing returns in marketing investments, which is perfectly aligned with the partial dependence plot of the TV investment, variable importance and early stopping. Note that the impact of marketing investments' impact varied across channels, while the interaction terms suggested that certain combination of channels produced synergistic effects, therefore underlining the importance of integrated marketing strategies. In addition, lagged variables indicated that marketing actions may affect sales with a temporal delay, rather than immediately. Also, Random Forest also performs well, with a MAE of 139.8002, which results to be better than any linear model, but it is slightly less precise than the Gradient Boosting because of the average of trees and that errors are not fixed sequentially. Moreover, regularized linear models (Lasso, Ridge and Elastic Net regressions) had a similar MAE, approximately 300, so that they three have a very similar performance, and consistently superior to the ordinary least squares, but they remained limited in their ability to capture complex patterns. Lastly, Stepwise performed better than the ordinary least squares (linear regression), which is clearly the worst-performing model, and insufficient for making predictions on this dataset.
+
+Based on these results, Gradient Boosting was selected as the final model for generating predictions on the test dataset due to its ability to capture non-linear relationships between marketing investments and sales, outperforming linear benchmarks in MAE and cross-validation stability. Hence, these predictions were later stored in a CSV file, under the name of "Team19.csv".
+
+```{r}
+final_predictions <- predict(
+  gbm_model,
+  newdata = test_df,
+  n.trees = best_iter
+)
+```
+
+```{r}
+submission <- data.frame(
+  Monday_date = test_df$Monday_date,
+  Sales = round(final_predictions, 0)
+)
+
+write.csv(submission, "Team19.csv", row.names = FALSE)
+```
+
+# **Conclusion**
+
+Throughout the assignment, it was demonstrated the importance of using appropiate modeling techniques when analyzing complex marketing and sales data. Hence, while linear and regularized regression models provided valuable interpretability and they served as useful benchmarks, their predictive performance was limited in the presence of non-linear relationships and interactions between variables.
+
+Moreover, ensemble-based methods, particularly Gradient Boosting, considerably outperformed all alternative approaches in terms of predictive accuracy. Therefore, its superior performance underlines the relevance of non-linear effects, diminishing returns, and cross-channel interactions in explaining sales dynanics.
+
+Furthermore, across all modeling techniques, a consistent set of variables emerged as key drivers of sales, including TV-related investments, digital performance channels, and the GBP exchange rate, as a proxy for macroeconomic conditions. Also, partial dependence analysis further revealed diminishing marginal returns to TV investment, underscoring the importance of optimal budget allocation, rather than increasing total spending indiscriminately.
+
+From a business perspective, these findings suggests that marketing effectiveness depends on its composition and timing, as well as on the magnitude of investment. Thus, the obtained results provided actionable insights for optimizing marketing budgets, therefore highlighting the value of advanced predictive analytics in supporting data-driven decision-making.
